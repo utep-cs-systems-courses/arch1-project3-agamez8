@@ -2,6 +2,8 @@
 #include <libTimer.h>
 #include "lcdutils.h"
 #include "lcddraw.h"
+#include "buzzer.h"
+#include "switches.h"
 
 // WARNING: LCD DISPLAY USES P1.0.  Do not touch!!! 
 
@@ -14,7 +16,7 @@
 
 #define SWITCHES 15
 
-static char 
+char 
 switch_update_interrupt_sense()
 {
   char p2val = P2IN;
@@ -36,20 +38,16 @@ switch_init()			/* setup switch */
 
 int switches = 0;
 
+/*
 void
 switch_interrupt_handler()
 {
   char p2val = switch_update_interrupt_sense();
   switches = ~p2val & SWITCHES;
 }
-
-
-// axis zero for col, axis 1 for row
-short drawPos[2] = {10,10}, controlPos[2] = {10,10};
-short velocity[2] = {3,8}, limits[2] = {screenWidth-36, screenHeight-8};
+*/
 
 short redrawScreen = 1;
-u_int controlFontColor = COLOR_GREEN;
 
 void wdt_c_handler()
 {
@@ -67,54 +65,89 @@ void update_shape();
 void main()
 {
   
-  P1DIR |= LED;		/**< Green led on when CPU on */
+  P1DIR |= LED;		/* Green led on when CPU on */
   P1OUT |= LED;
   configureClocks();
-  lcd_init();
-  switch_init();
-  
-  enableWDTInterrupts();      /**< enable periodic interrupt */
-  or_sr(0x8);	              /**< GIE (enable interrupts) */
+  lcd_init();                 /** enable display lcd */
+  switch_init();              /** enable switches */
+  buzzer_init();              /** enable buzzer */
+  enableWDTInterrupts();      /** enable periodic interrupt */
+  or_sr(0x8);	              /** GIE (enable interrupts) */
+
+  u_char width = screenWidth, height = screenHeight;
   
   clearScreen(COLOR_BLUE);
   while (1) {			/* forever */
     if (redrawScreen) {
+      drawString5x7(42, 5, "PAC-MAN", COLOR_YELLOW, COLOR_BLUE);
+      drawString5x7(12, 115, ". . . * . . . . .", COLOR_WHITE, COLOR_BLUE);
+      
       redrawScreen = 0;
       update_shape();
     }
     P1OUT &= ~LED;	/* led off */
-    or_sr(0x10);	/**< CPU OFF */
+    or_sr(0x10);	/* CPU OFF */
     P1OUT |= LED;	/* led on */
   }
 }
 
-    
-    
+// color of the shape
+unsigned int SHAPE_COLOR = COLOR_YELLOW;
+
 void
 update_shape()
 {
   static unsigned char row = screenHeight / 2, col = screenWidth / 2;
-  static char blue = 31, green = 0, red = 31;
+  
+  static int colStep = 2;
+  static int rowStep = 2;
+
   static unsigned char step = 0;
-  if (switches & SW4) return;
-  if (step <= 60) {
+
+  if (step <= 10)
+  {
     int startCol = col - step;
     int endCol = col + step;
-    int width = 1 + endCol - startCol;
-    // a color in this BGR encoding is BBBB BGGG GGGR RRRR
-    unsigned int color = (blue << 11) | (green << 5) | red;
-    fillRectangle(startCol, row+step, width, 1, color);
-    fillRectangle(startCol, row-step, width, 1, color);
-    if (switches & SW3) green = (green + 1) % 64;
-    if (switches & SW2) blue = (blue + 2) % 32;
-    if (switches & SW1) red = (red - 3) % 32;
+    int width = 22; // endCol - startCol
+
+    fillRectangle(endCol-step, row-step, width, 1, SHAPE_COLOR); // fill shape with color
+    fillRectangle(endCol-step, row+step, width, 1, SHAPE_COLOR);
+
+    // button s1
+    if (switches & SW1)
+    {
+      SHAPE_COLOR = COLOR_BLACK; /* change shape color to black */
+      buzzer_off();
+    }
+
+    // button s2
+    if (switches & SW2)
+    {
+      SHAPE_COLOR = COLOR_RED;    /* change shape color to red */
+      buzzer_off();
+    }
+
+    // button s3
+    if (switches & SW3)
+    {
+      SHAPE_COLOR = COLOR_GREEN;  /* change shape color to green */
+      buzzer_off();
+    }
+
+    // button s4
+    if (switches & SW4)
+    {
+      starwars_song();            /* play a note of the song every time you click the button */
+    }
+
     step ++;
+    
   } else {
-     clearScreen(COLOR_BLUE);
-     step = 0;
+    col -= colStep*2; // shift shape left
+    clearScreen(COLOR_BLUE); // keep screen blue
+    step = 0; // reset step
   }
 }
-
 
 /* Switch on S2 */
 void
