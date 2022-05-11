@@ -1,0 +1,3 @@
+	.text
+	
+	.global buzzer_set_period
